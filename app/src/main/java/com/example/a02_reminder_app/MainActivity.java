@@ -1,6 +1,8 @@
 package com.example.a02_reminder_app;
 
+import android.content.Intent;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
@@ -9,16 +11,21 @@ import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
 import android.support.v7.widget.helper.ItemTouchHelper;
 import android.text.TextUtils;
+import android.util.Log;
+import android.view.GestureDetector;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.EditText;
+import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
-public class MainActivity extends AppCompatActivity {
-
+public class MainActivity extends AppCompatActivity implements RecyclerView.OnItemTouchListener {
 
 //instance variables
 
@@ -30,38 +37,71 @@ public class MainActivity extends AppCompatActivity {
 
     private EditText mNewReminderText;
 
+    private GestureDetector mGestureDetector;
+
+    public static final String EXTRA_REMINDER = "Reminder";
+
+    public static final int REQUESTCODE = 1234;
+
+    private int mModifyPosition;
+
+    //Create ab ubstabce if the AppDatabase class
+    private ReminderRoomDatabase db;
+
+    //Add the following class variable
+    //In MainActivity there are four statements which have an interaction with the database.
+    // These need to be run on a background thread using the executor. Create the following methods
+
+    private Executor executor = Executors.newSingleThreadExecutor();
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
 
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        db = ReminderRoomDatabase.getDatabase(this);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
+
+
         mRecyclerView = findViewById(R.id.recyclerView);
         mNewReminderText = findViewById(R.id.editText_main);
-
         mReminders = new ArrayList<>();
         mRecyclerView.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
+
+        // new code added
+        mGestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+            @Override
+            public boolean onSingleTapUp(MotionEvent e) {
+                return true;
+            }
+        });
+
+        mRecyclerView.addOnItemTouchListener(this);
+
 
 
         FloatingActionButton fab = findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+
                 String text = mNewReminderText.getText().toString();
                 Reminder newReminder = new Reminder(text);
 
                 //Check if some text has been added
+
                 if (!(TextUtils.isEmpty(text))) {
-                    //Add tect to the list (datamodel)
-                    mReminders.add(newReminder);
 
-                    //Tell the adapter that the data set has been modified: the screen will be refreshed.
-                    updateUI();
+                    // Insert the reminder in the database.
 
-                    //initialize the EditText for the next item
+                    insertReminder(newReminder);
+
+                    //Initialize the EditText for the next item
+
                     mNewReminderText.setText("");
+
                 } else {
                     //Show a message to the user if the textfield is empty
                     Snackbar.make(view, "Please enter some text in the textfield",
@@ -95,8 +135,14 @@ public class MainActivity extends AppCompatActivity {
 
                         //Get the index corresponding to the selected position
                         int position = (viewHolder.getAdapterPosition());
+
+                        deleteReminder(mReminders.get(position));
                         mReminders.remove(position);
                         mAdapter.notifyItemRemoved(position);
+//                        updateUI();
+//
+//                        mReminders.remove(position);
+//                        mAdapter.notifyItemRemoved(position);
 
                     }
 
@@ -105,6 +151,13 @@ public class MainActivity extends AppCompatActivity {
 
         ItemTouchHelper itemTouchHelper = new ItemTouchHelper(simpleItemTouchCallback);
         itemTouchHelper.attachToRecyclerView(mRecyclerView);
+        mRecyclerView.addOnItemTouchListener(this);
+
+
+
+        //new Code
+        getAllReminders();
+
 
     }
 
@@ -130,16 +183,165 @@ public class MainActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
+
     private void updateUI() {
 
+
         if (mAdapter == null) {
+
             mAdapter = new ReminderAdapter(mReminders);
+
             mRecyclerView.setAdapter(mAdapter);
 
         } else {
-            mAdapter.notifyDataSetChanged();
+
+            mAdapter.swapList(mReminders);
 
         }
 
     }
+
+    @Override
+    public boolean onInterceptTouchEvent(@NonNull RecyclerView recyclerView, @NonNull MotionEvent motionEvent) {
+
+        View child = recyclerView.findChildViewUnder(motionEvent.getX(), motionEvent.getY());
+        int mAdapterPosition = recyclerView.getChildAdapterPosition(child);
+        if (child != null && mGestureDetector.onTouchEvent(motionEvent)) {
+            //Click
+            //Toast.makeText(this, mReminders.get(mAdapterPosition).getReminderText(), Toast.LENGTH_SHORT).show();
+            //
+
+            //invoke UpdaActivity
+            Intent intent = new Intent(MainActivity.this, UpdateActivity.class);
+            mModifyPosition = mAdapterPosition;
+            intent.putExtra(EXTRA_REMINDER,  mReminders.get(mAdapterPosition));
+            startActivityForResult(intent, REQUESTCODE);
+        }
+
+        return false;
+    }
+
+    @Override
+    public void onTouchEvent(@NonNull RecyclerView recyclerView, @NonNull MotionEvent motionEvent) {
+
+    }
+
+    @Override
+    public void onRequestDisallowInterceptTouchEvent(boolean b) {
+
+    }
+
+    @Override
+
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+
+        if (requestCode == REQUESTCODE) {
+
+            if (resultCode == RESULT_OK) {
+
+                Reminder updatedReminder = data.getParcelableExtra(MainActivity.EXTRA_REMINDER);
+
+                // New timestamp: timestamp of update
+//                mReminders.set(mModifyPosition, updatedReminder);
+//                db.reminderDao().updateReminder(updatedReminder);
+//
+//                updateUI();
+                updateReminder(updatedReminder);
+
+            }
+
+        }
+
+    }
+
+    private void getAllReminders() {
+
+        executor.execute(new Runnable() {
+
+            @Override
+
+            public void run() {
+
+                mReminders = db.reminderDao().getAllReminders();
+
+                // In a background thread the user interface cannot be updated from this thread.
+
+                // This method will perform statements on the main thread again.
+
+                runOnUiThread(new Runnable() {
+
+                    @Override
+
+                    public void run() {
+
+                        updateUI();
+
+                    }
+
+                });
+
+            }
+
+        });
+
+    }
+
+
+    private void insertReminder(final Reminder reminder) {
+
+        executor.execute(new Runnable() {
+
+            @Override
+
+            public void run() {
+
+                db.reminderDao().insertReminder(reminder);
+
+                getAllReminders(); // Because the Room database has been modified we need to get the new list of reminders.
+
+            }
+
+        });
+
+    }
+
+
+    private void updateReminder(final Reminder reminder) {
+
+        executor.execute(new Runnable() {
+
+            @Override
+
+            public void run() {
+
+                db.reminderDao().updateReminder(reminder);
+
+                getAllReminders(); // Because the Room database has been modified we need to get the new list of reminders.
+
+            }
+
+        });
+
+    }
+
+
+    private void deleteReminder(final Reminder reminder) {
+
+        executor.execute(new Runnable() {
+
+            @Override
+
+            public void run() {
+
+                db.reminderDao().deleteReminder(reminder);
+
+                getAllReminders(); // Because the Room database has been modified we need to get the new list of reminders.
+
+            }
+
+        });
+
+    }
+
+
 }

@@ -14,23 +14,8 @@ public class ReminderAdapter extends RecyclerView.Adapter<ReminderAdapter.ViewHo
 
     private List<Reminder> mReminders;
 
-
     public ReminderAdapter(List<Reminder> mReminders) {
         this.mReminders = mReminders;
-    }
-
-    public class ViewHolder extends RecyclerView.ViewHolder {
-
-        TextView textView;
-
-        public ViewHolder(View itemView) {
-
-            super(itemView);
-
-            textView = itemView.findViewById(android.R.id.text1);
-
-        }
-
     }
 
     @NonNull
@@ -47,12 +32,43 @@ public class ReminderAdapter extends RecyclerView.Adapter<ReminderAdapter.ViewHo
     @Override
     public void onBindViewHolder(@NonNull ReminderAdapter.ViewHolder viewHolder, int i) {
         Reminder reminder = mReminders.get(i);
-        viewHolder.textView.setText(reminder.getmReminderText());
+        viewHolder.textView.setText(reminder.getReminderText());
     }
 
     @Override
     public int getItemCount() {
         return mReminders.size();
+    }
+
+
+
+    // add the following method to be able to insert a change the list.
+    public void swapList (List<Reminder> newList) {
+
+        mReminders = newList;
+
+        if (newList != null) {
+
+            // Force the RecyclerView to refresh
+
+            this.notifyDataSetChanged();
+
+        }
+
+    }
+
+    public class ViewHolder extends RecyclerView.ViewHolder {
+
+        TextView textView;
+
+        public ViewHolder(View itemView) {
+
+            super(itemView);
+
+            textView = itemView.findViewById(android.R.id.text1);
+
+        }
+
     }
 
 
